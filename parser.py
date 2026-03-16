@@ -1,6 +1,8 @@
 import os
-import math
+import numpy as np
+from scipy.spatial import distance
 import matplotlib.pyplot as plt
+import time
 
 def leer_tsp_local(ruta_archivo):
     print(f"\n[1/3] Leyendo archivo local: {ruta_archivo}...")
@@ -23,45 +25,43 @@ def leer_tsp_local(ruta_archivo):
                         coordenadas_x.append(float(partes[1]))
                         coordenadas_y.append(float(partes[2]))
                         
-        print(f"      ✓ Se leyeron {len(coordenadas_x)} ciudades correctamente.")
+        print(f"       Se leyeron {len(coordenadas_x)} ciudades correctamente.")
         return coordenadas_x, coordenadas_y
         
     except FileNotFoundError:
         print(f"\n ERROR: No se encontró el archivo '{ruta_archivo}'.")
         return None, None
 
-def calcular_matriz_distancias(x, y):
-    """Calcula la matriz de distancias euclidianas entre todos los nodos."""
-    print("[2/3] Calculando matriz de distancias NxN...")
-    n = len(x)
-    matriz = [[0.0 for _ in range(n)] for _ in range(n)]
+def calcular_matriz_optimizada(x, y):
+    """Calcula la matriz NxN usando vectorización subyacente en C (SciPy)."""
+    print("[2/3] Calculando matriz de distancias vectorizada...")
+    inicio = time.time()
     
-    for i in range(n):
-        for j in range(n):
-            if i != j:
-                distancia = math.sqrt((x[i] - x[j])**2 + (y[i] - y[j])**2)
-                matriz[i][j] = round(distancia) # El estándar TSPLIB usa enteros
+    # Unir X y Y en una matriz de N filas y 2 columnas
+    coordenadas = np.column_stack((x, y))
     
-    print(f"      ✓ Matriz de {n}x{n} generada.")
+    # cdist calcula TODA la matriz euclidiana de golpe
+    matriz = distance.cdist(coordenadas, coordenadas, 'euclidean')
+    
+    # Redondear a enteros según estándar TSPLIB
+    matriz = np.round(matriz).astype(np.int32) 
+    
+    fin = time.time()
+    print(f"      ✓ Matriz de {len(x)}x{len(x)} generada en {fin - inicio:.4f} segundos.")
     return matriz
 
-def guardar_matriz_txt(matriz, ruta_salida):
-    """Guarda la matriz en un archivo de texto de forma legible."""
+def guardar_matriz_binaria(matriz, ruta_base):
+    """Guarda la matriz en un formato binario .npy ultraligero."""
     print(f"[3/3] Exportando datos para el Algoritmo Evolutivo...")
-    with open(ruta_salida, 'w') as archivo:
-        archivo.write(f"{len(matriz)}\n")
-        
-        for fila in matriz:
-            linea_str = "\t".join(str(int(valor)) for valor in fila)
-            archivo.write(linea_str + "\n")
-            
-    print(f"      ✓ Archivo de texto guardado en: {ruta_salida}")
+    ruta_salida = f"{ruta_base}.npy"
+    np.save(ruta_salida, matriz)
+    print(f"      ✓ Archivo binario guardado en: {ruta_salida}")
 
 
 carpeta_datos = "data" 
 
 print("="*50)
-print(" PREPROCESADOR DE INSTANCIAS TSPLIB ")
+print(" PREPROCESADOR OPTIMIZADO TSPLIB ")
 print("="*50)
 
 if not os.path.exists(carpeta_datos):
@@ -82,10 +82,10 @@ else:
         x, y = leer_tsp_local(ruta_completa)
 
         if x and y:
-            matriz_distancias = calcular_matriz_distancias(x, y)
+            matriz_distancias = calcular_matriz_optimizada(x, y)
             
-            nombre_txt = f"matriz_{nombre_archivo.replace('.tsp', '.txt')}"
-            guardar_matriz_txt(matriz_distancias, nombre_txt)
+            ruta_base_salida = os.path.join(carpeta_datos, f"matriz_{nombre_archivo.replace('.tsp', '')}")
+            guardar_matriz_binaria(matriz_distancias, ruta_base_salida)
             
             print("\nGenerando visualización espacial...")
             plt.figure(figsize=(8, 6))
@@ -103,9 +103,9 @@ else:
             
             nombre_imagen = f"plot_{nombre_archivo.replace('.tsp', '.png')}"
             plt.savefig(nombre_imagen, dpi=300, bbox_inches='tight')
-            print(f"      ✓ Gráfica guardada como '{nombre_imagen}'")
+            print(f"       Gráfica guardada como '{nombre_imagen}'")
             
             print("\n ¡PROCESO COMPLETADO CON ÉXITO! ")
-            print("Revisa tu carpeta, ya tienes los inputs listos para el paper.")
+            print("Revisa tu carpeta, ya tienes los inputs optimizados listos para el paper.")
             
             plt.show()
